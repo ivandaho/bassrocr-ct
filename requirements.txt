@@ -1,2 +1,5 @@
 numpy
 opencv-python
+tqdm
+pytesseract
+pandas

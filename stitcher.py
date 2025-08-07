@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import argparse
 import os
+from tqdm import tqdm
 
 def mse(imageA, imageB):
     """Calculates the Mean Squared Error between two images."""
@@ -18,11 +19,19 @@ def extract_keyframes(video_path, debug=False):
     # This threshold determines how different a frame must be to be considered a
     # new keyframe. A lower value means more frames will be extracted.
     DIFFERENCE_THRESHOLD = 5500
+    # Limit processing to a max FPS to speed up analysis on high-FPS videos.
+    MAX_PROCESSING_FPS = 30
 
     print("Step 1: Extracting keyframes...")
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise IOError(f"Cannot open video file: {video_path}")
+
+    video_fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_skip = 1
+    if video_fps > MAX_PROCESSING_FPS:
+        frame_skip = int(round(video_fps / MAX_PROCESSING_FPS))
+        print(f"  Video FPS ({video_fps:.2f}) > max FPS ({MAX_PROCESSING_FPS}). Processing 1 of every {frame_skip} frames.")
 
     if debug:
         debug_path = "debug_keyframes"
@@ -31,7 +40,7 @@ def extract_keyframes(video_path, debug=False):
         print(f"  Keyframe debugging is enabled. Saving to '{debug_path}'")
 
     keyframes = []
-    total_frames = 0
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     
     ret, prev_frame = cap.read()
     if not ret:
@@ -42,21 +51,36 @@ def extract_keyframes(video_path, debug=False):
     keyframes.append(prev_frame)
     if debug:
         cv2.imwrite(os.path.join(debug_path, f"keyframe_{len(keyframes)-1:04d}.png"), prev_frame)
-    total_frames += 1
 
-    while True:
-        ret, current_frame = cap.read()
-        if not ret:
-            break
-        
-        total_frames += 1
-        
-        difference = mse(current_frame, keyframes[-1])
-        
-        if difference > DIFFERENCE_THRESHOLD:
-            keyframes.append(current_frame)
-            if debug:
-                cv2.imwrite(os.path.join(debug_path, f"keyframe_{len(keyframes)-1:04d}.png"), current_frame)
+    with tqdm(total=total_frames, desc="Extracting frames", unit="frame") as pbar:
+        pbar.update(1)
+        frame_count = 1
+        while True:
+            # Skip frames if necessary. We skip (frame_skip - 1) frames.
+            for _ in range(frame_skip - 1):
+                ret = cap.grab() # .grab() is faster as it doesn't decode
+                if not ret:
+                    break
+                frame_count += 1
+                pbar.update(1)
+            
+            if not ret:
+                break # Reached end of video during skip
+
+            # Now, read the frame we want to process
+            ret, current_frame = cap.read()
+            if not ret:
+                break # Reached end of video
+            
+            frame_count += 1
+            pbar.update(1)
+            
+            difference = mse(current_frame, keyframes[-1])
+            
+            if difference > DIFFERENCE_THRESHOLD:
+                keyframes.append(current_frame)
+                if debug:
+                    cv2.imwrite(os.path.join(debug_path, f"keyframe_{len(keyframes)-1:04d}.png"), current_frame)
             
     cap.release()
     print(f"  Extracted {len(keyframes)} keyframes from {total_frames} total frames.")
@@ -151,7 +175,7 @@ def main():
     parser.add_argument(
         "--roi",
         help="Region of Interest 'x,y,w,h'.\nExample: --roi 80,150,800,1600",
-        default="0,0,0,0"
+        default="53,326,785,1226"
     )
     parser.add_argument(
         "--debug-next-data",
