@@ -7,6 +7,7 @@ import os
 import re
 import csv
 from datetime import datetime
+SOURCE_STATEMENT_TYPE = "uobone"
 
 def preprocess_image(image_path, debug=False):
     """Load the image and preprocess it for OCR and line detection."""
@@ -18,6 +19,7 @@ def preprocess_image(image_path, debug=False):
 
     print("Step 1: Preprocessing image...")
     image = cv2.imread(image_path)
+    # image[1:2, ]
     if image is None:
         raise FileNotFoundError(f"Could not read image at: {image_path}")
     
@@ -97,7 +99,10 @@ def segment_image(original_image, lines):
         bottom = line_boundaries[i+1]
         
         # Crop a segment from the original image
-        segment = original_image[top:bottom, :]
+        if SOURCE_STATEMENT_TYPE == "evol":
+            segment = original_image[top:bottom, :728]
+        else:
+            segment = original_image[top:bottom, :]
         
         # Basic sanity check: ignore very small segments
         if segment.shape[0] > 10: # Segment must be at least 10 pixels high
@@ -177,8 +182,8 @@ def parse_segments(segments, debug=False):
 
             transactions.append({
                 "Date": current_date,
-                "Description": description,
-                "Amount": formatted_amount
+                "description": description,
+                "amount": formatted_amount
             })
             print(f"  Parsed transaction: {description} | {formatted_amount}")
         else:
@@ -201,7 +206,7 @@ def save_to_csv(transactions, output_path):
         
     print(f"Step 5: Saving data to {output_path}...")
     df = pd.DataFrame(transactions)
-    df = df[["Date", "Description", "Amount"]] # Ensure column order
+    df = df[["Date", "description", "amount"]] # Ensure column order
     # Use quoting=csv.QUOTE_ALL to wrap every field in double quotes.
     df.to_csv(output_path, index=False, quoting=csv.QUOTE_ALL)
     print("Done.")
