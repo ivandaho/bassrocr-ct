@@ -97,7 +97,7 @@ def determine_next_data(stitched_roi, next_frame, roi, debug=False, frame_num=0)
     next_frame_roi = next_frame[roi[1]:roi[1]+roi[3], roi[0]:roi[0]+roi[2]]
 
     # Use a larger template for better uniqueness.
-    template_height = min(200, int(stitched_roi.shape[0] * 0.8))
+    template_height = min(300, int(stitched_roi.shape[0] * 0.8))
     if template_height <= 20: # Template too small to be reliable
         return None
     template = stitched_roi[-template_height:]
