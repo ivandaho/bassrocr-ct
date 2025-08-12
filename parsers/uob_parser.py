@@ -6,15 +6,19 @@ from .base_parser import TransactionParser
 
 class UOBParser(TransactionParser):
     """Parses transactions from UOB (uobone, uobevol) statement screenshots."""
+    
+    requires_dividers = True
 
     def parse(self):
         """
         Perform OCR on each segment and parse the text based on the UOB format.
-        - Date: "DD Mon" (optional, at the start)
-        - Amount: "[+|-] XX.XX SGD" (required, at the end)
-        - Description: Everything else.
         """
         print("Step 4: Parsing segments with UOBParser...")
+        
+        segments = self.data.get('segments')
+        if not segments:
+            print("  Error: UOBParser requires image segments but none were provided.")
+            return []
 
         debug_path = "debug_segments"
         if self.debug:
@@ -23,13 +27,10 @@ class UOBParser(TransactionParser):
             print(f"  Segment debugging is enabled. Saving to '{debug_path}'")
 
         current_date = None
-
-        # Regex to find a date like "14 Jul" or "06 Aug" at the START of the string.
         date_pattern = re.compile(r"^(\d{1,2}\s\w{3})")
-        # Regex to find an amount like "+ 14.10 SGD" or "- 2.50 SGD" at the END of the string.
         amount_pattern = re.compile(r"([\+\-]\s\d+\.\d{2}\sSGD)$")
 
-        for i, segment in enumerate(self.segments):
+        for i, segment in enumerate(segments):
             if self.debug:
                 cv2.imwrite(os.path.join(debug_path, f"segment_{i:03d}.png"), segment)
 

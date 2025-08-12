@@ -3,8 +3,9 @@ import pandas as pd
 import argparse
 import os
 import csv
+import pytesseract
 from config import get_statement_config
-from parsers import get_parser
+from parsers import get_parser, PARSER_MAPPING
 
 def preprocess_image(image_path, greyscale_threshold, theme='light', debug=False):
     """Load the image and preprocess it for OCR and line detection."""
@@ -15,14 +16,9 @@ def preprocess_image(image_path, greyscale_threshold, theme='light', debug=False
     
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     
-    # The goal is to get a black background with white text/lines.
     if theme == 'dark':
-        # For dark mode (light text on dark background), we use a standard binary threshold.
-        # Pixels brighter than the threshold become white (255).
         threshold_type = cv2.THRESH_BINARY
     else:
-        # For light mode (dark text on light background), we use an inverted binary threshold.
-        # Pixels darker than the threshold become white (255).
         threshold_type = cv2.THRESH_BINARY_INV
 
     _, thresh = cv2.threshold(gray, greyscale_threshold, 255, threshold_type)
@@ -80,7 +76,6 @@ def segment_image(original_image, lines, statement_type="uobone"):
         top = line_boundaries[i]
         bottom = line_boundaries[i+1]
         
-        # Specific cropping logic can be handled here or in the parser itself if needed
         if statement_type == "uobevol":
             segment = original_image[top:bottom, :728]
         else:
@@ -115,6 +110,9 @@ def main():
     
     try:
         config = get_statement_config(args.statement_type)
+        parser_class = PARSER_MAPPING.get(args.statement_type)
+        if not parser_class:
+            raise ValueError(f"Unsupported statement type: {args.statement_type}")
     except (FileNotFoundError, ValueError) as e:
         print(f"Error: {e}")
         return
@@ -125,39 +123,29 @@ def main():
     )
     parser.add_argument("image_path", help="Path to the input PNG image.")
     parser.add_argument("csv_path", help="Path to save the output CSV file.")
-    parser.add_argument(
-        "--greyscale-threshold",
-        type=int,
-        default=config.get('parser_greyscale_threshold'),
-        help="Greyscale threshold for image preprocessing. Overrides config file."
-    )
-    parser.add_argument(
-        "--theme",
-        choices=['light', 'dark'],
-        default=config.get('theme', 'light'),
-        help="Image theme (light or dark). Overrides config file."
-    )
-    parser.add_argument(
-        "--debug-segments",
-        action="store_true",
-        help="Save intermediate image segments to a 'debug_segments/' folder."
-    )
-    parser.add_argument(
-        "--debug-greyscale",
-        action="store_true",
-        help="Save the intermediate greyscale threshold image."
-    )
+    parser.add_argument("--greyscale-threshold", type=int, default=config.get('parser_greyscale_threshold'), help="Greyscale threshold for image preprocessing.")
+    parser.add_argument("--theme", choices=['light', 'dark'], default=config.get('theme', 'light'), help="Image theme.")
+    parser.add_argument("--debug-segments", action="store_true", help="Save intermediate image segments.")
+    parser.add_argument("--debug-greyscale", action="store_true", help="Save the intermediate greyscale threshold image.")
     args = parser.parse_args()
 
     try:
         original_image, _, thresh_image = preprocess_image(
             args.image_path, args.greyscale_threshold, args.theme, args.debug_greyscale
         )
-        dividers = detect_transaction_dividers(thresh_image)
-        segments = segment_image(original_image, dividers, args.statement_type)
-        
-        # Use the factory to get the correct parser
-        parser_instance = get_parser(args.statement_type, segments, args.debug_segments)
+
+        parser_kwargs = {'debug': args.debug_segments}
+        if parser_class.requires_dividers:
+            dividers = detect_transaction_dividers(thresh_image)
+            segments = segment_image(original_image, dividers, args.statement_type)
+            parser_kwargs['segments'] = segments
+        else:
+            print("Step 2/3: Skipping divider detection and segmentation.")
+            print("Step 4: Performing full-page OCR...")
+            ocr_data = pytesseract.image_to_data(original_image, output_type=pytesseract.Output.DATAFRAME)
+            parser_kwargs['ocr_data'] = ocr_data
+
+        parser_instance = get_parser(args.statement_type, **parser_kwargs)
         transactions = parser_instance.parse()
         
         save_to_csv(transactions, args.csv_path)

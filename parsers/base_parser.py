@@ -5,18 +5,23 @@ class TransactionParser(ABC):
     Abstract base class for all statement parsers.
     Ensures that every parser implements a consistent interface.
     """
+    
+    # Class attribute to indicate if the parser needs pre-segmented images.
+    # If False, the parser expects a full OCR data dictionary from Tesseract.
+    requires_dividers = True
 
-    def __init__(self, segments, debug=False):
+    def __init__(self, debug=False, **kwargs):
         """
-        Initializes the parser with the image segments.
+        Initializes the parser.
 
         Args:
-            segments (list): A list of image segments (as numpy arrays) representing potential transactions.
             debug (bool): Flag to enable or disable debugging output.
+            **kwargs: Either 'segments' (list of images) or 'ocr_data' (dict).
         """
-        self.segments = segments
         self.debug = debug
         self.transactions = []
+        # Store whatever data is passed (segments or ocr_data)
+        self.data = kwargs
 
     @abstractmethod
     def parse(self):

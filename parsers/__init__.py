@@ -8,14 +8,14 @@ PARSER_MAPPING = {
     "trust": TrustBankParser,
 }
 
-def get_parser(statement_type, segments, debug=False):
+def get_parser(statement_type, **kwargs):
     """
     Factory function to get the appropriate parser instance.
 
     Args:
         statement_type (str): The type of statement (e.g., 'uobone', 'trust').
-        segments (list): The list of image segments to be parsed.
-        debug (bool): Flag for enabling debug mode.
+        **kwargs: A dictionary of arguments to pass to the parser's constructor
+                  (e.g., debug=True, segments=[...], or ocr_data={...}).
 
     Returns:
         An instance of a TransactionParser subclass.
@@ -29,4 +29,5 @@ def get_parser(statement_type, segments, debug=False):
         raise ValueError(f"Unsupported statement type: '{statement_type}'. "
                          f"Supported types are: {list(PARSER_MAPPING.keys())}")
                          
-    return parser_class(segments, debug=debug)
+    # Pass the keyword arguments directly to the parser's constructor
+    return parser_class(**kwargs)
