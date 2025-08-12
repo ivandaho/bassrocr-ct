@@ -1,0 +1,23 @@
+# Default settings that apply to all statement types unless overridden.
+default:
+  roi: "53,326,785,1226"
+  stitcher_diff_threshold: 5500
+  parser_greyscale_threshold: 245
+
+# Settings for the 'uobone' statement type. This is the primary default.
+# uobone:
+#   roi: "53,326,785,1226"
+#   stitcher_diff_threshold: 5500
+#   parser_greyscale_threshold: 245
+
+# Settings for the 'uobevol' statement type.
+uobevol:
+  roi: "53,326,785,1226"
+  stitcher_diff_threshold: 2900
+  parser_greyscale_threshold: 245
+
+# Settings for the 'trust' statement type.
+trust:
+  roi: "26,220,360,645" # Example values, adjust as needed
+  stitcher_diff_threshold: 2900
+  parser_greyscale_threshold: 245

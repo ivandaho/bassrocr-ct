@@ -7,19 +7,12 @@ import os
 import re
 import csv
 from datetime import datetime
-SOURCE_STATEMENT_TYPE = "uobone"
+from config import get_statement_config
 
-def preprocess_image(image_path, debug=False):
+def preprocess_image(image_path, greyscale_threshold, debug=False):
     """Load the image and preprocess it for OCR and line detection."""
-    # This value is crucial. It's the pixel intensity threshold used to
-    # separate the background from the lines and text. For a white background
-    # (pixel value ~255) and grey lines, a value around 230 is a good start.
-    # You may need to tune this value for your specific screenshot's brightness.
-    GREYSCALE_THRESHOLD = 245
-
-    print("Step 1: Preprocessing image...")
+    print(f"Step 1: Preprocessing image... (Greyscale Threshold: {greyscale_threshold})")
     image = cv2.imread(image_path)
-    # image[1:2, ]
     if image is None:
         raise FileNotFoundError(f"Could not read image at: {image_path}")
     
@@ -28,7 +21,7 @@ def preprocess_image(image_path, debug=False):
     # Apply an inverted binary threshold. This makes the white background black (0)
     # and everything darker than the threshold (like grey lines and black text)
     # white (255). This is ideal for the Hough Line Transform to find the dividers.
-    _, thresh = cv2.threshold(gray, GREYSCALE_THRESHOLD, 255, cv2.THRESH_BINARY_INV)
+    _, thresh = cv2.threshold(gray, greyscale_threshold, 255, cv2.THRESH_BINARY_INV)
     
     if debug:
         debug_filename = "debug_greyscale_threshold.png"
@@ -85,9 +78,9 @@ def detect_transaction_dividers(thresh_image):
     print(f"  Detected {len(merged_lines)} distinct horizontal dividers.")
     return merged_lines
 
-def segment_image(original_image, lines):
+def segment_image(original_image, lines, statement_type="uobone"):
     """Segment the image into transaction rows based on detected lines."""
-    print("Step 3: Segmenting image into transaction rows...")
+    print(f"Step 3: Segmenting image into transaction rows... (statement_type: {statement_type})")
     segments = []
     height = original_image.shape[0]
     
@@ -99,7 +92,7 @@ def segment_image(original_image, lines):
         bottom = line_boundaries[i+1]
         
         # Crop a segment from the original image
-        if SOURCE_STATEMENT_TYPE == "evol":
+        if statement_type == "uobevol":
             segment = original_image[top:bottom, :728]
         else:
             segment = original_image[top:bottom, :]
@@ -212,9 +205,35 @@ def save_to_csv(transactions, output_path):
     print("Done.")
 
 def main():
-    parser = argparse.ArgumentParser(description="Parse transactions from a stitched bank app screenshot.")
+    # First, parse only the statement type to load the correct config
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument(
+        "-s", "--statement-type",
+        default="uobone",
+        help="Type of statement to process (e.g., uobone, uobevol, trust). Determines default settings."
+    )
+    args, _ = pre_parser.parse_known_args()
+    
+    # Load configuration based on statement type
+    try:
+        config = get_statement_config(args.statement_type)
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        return
+
+    # Now, define the full parser with defaults from the loaded config
+    parser = argparse.ArgumentParser(
+        description="Parse transactions from a stitched bank app screenshot.",
+        parents=[pre_parser]
+    )
     parser.add_argument("image_path", help="Path to the input PNG image.")
     parser.add_argument("csv_path", help="Path to save the output CSV file.")
+    parser.add_argument(
+        "--greyscale-threshold",
+        type=int,
+        default=config.get('parser_greyscale_threshold'),
+        help="Greyscale threshold for image preprocessing. Overrides config file."
+    )
     parser.add_argument(
         "--debug-segments",
         action="store_true",
@@ -231,9 +250,9 @@ def main():
         # Note: This script requires Tesseract to be installed on your system.
         # Please see: https://tesseract-ocr.github.io/tessdoc/Installation.html
         
-        original_image, gray_image, thresh_image = preprocess_image(args.image_path, args.debug_greyscale)
+        original_image, gray_image, thresh_image = preprocess_image(args.image_path, args.greyscale_threshold, args.debug_greyscale)
         dividers = detect_transaction_dividers(thresh_image)
-        segments = segment_image(original_image, dividers)
+        segments = segment_image(original_image, dividers, args.statement_type)
         transactions = parse_segments(segments, args.debug_segments)
         save_to_csv(transactions, args.csv_path)
 

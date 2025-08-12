@@ -3,6 +3,7 @@ import numpy as np
 import argparse
 import os
 from tqdm import tqdm
+from config import get_statement_config
 
 def mse(imageA, imageB):
     """Calculates the Mean Squared Error between two images."""
@@ -10,19 +11,16 @@ def mse(imageA, imageB):
     err /= float(imageA.shape[0] * imageA.shape[1])
     return err
 
-def extract_keyframes(video_path, debug=False):
+def extract_keyframes(video_path, diff_threshold, debug=False):
     """
     Extracts keyframes from a video file by comparing consecutive frames.
     A frame is considered a keyframe if it's significantly different from the
     previous keyframe.
     """
-    # This threshold determines how different a frame must be to be considered a
-    # new keyframe. A lower value means more frames will be extracted.
-    DIFFERENCE_THRESHOLD = 5500
     # Limit processing to a max FPS to speed up analysis on high-FPS videos.
     MAX_PROCESSING_FPS = 30
 
-    print("Step 1: Extracting keyframes...")
+    print(f"Step 1: Extracting keyframes... (Difference Threshold: {diff_threshold})")
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise IOError(f"Cannot open video file: {video_path}")
@@ -77,7 +75,7 @@ def extract_keyframes(video_path, debug=False):
             
             difference = mse(current_frame, keyframes[-1])
             
-            if difference > DIFFERENCE_THRESHOLD:
+            if difference > diff_threshold:
                 keyframes.append(current_frame)
                 if debug:
                     cv2.imwrite(os.path.join(debug_path, f"keyframe_{len(keyframes)-1:04d}.png"), current_frame)
@@ -170,12 +168,41 @@ def main():
         description="Stitch a scrolling region of interest from a video into a single PNG.",
         formatter_class=argparse.RawTextHelpFormatter
     )
+    
+    # First, parse only the statement type to load the correct config
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument(
+        "-s", "--statement-type",
+        default="uobone",
+        help="Type of statement to process (e.g., uobone, uobevol, trust). Determines default settings."
+    )
+    args, _ = pre_parser.parse_known_args()
+    
+    # Load configuration based on statement type
+    try:
+        config = get_statement_config(args.statement_type)
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        return
+
+    # Now, define the full parser with defaults from the loaded config
+    parser = argparse.ArgumentParser(
+        description="Stitch a scrolling region of interest from a video into a single PNG.",
+        formatter_class=argparse.RawTextHelpFormatter,
+        parents=[pre_parser] # Inherit the --statement-type argument
+    )
     parser.add_argument("video_path", help="Path to the input video file.")
     parser.add_argument("output_path", help="Path to save the output PNG image.")
     parser.add_argument(
         "--roi",
-        help="Region of Interest 'x,y,w,h'.\nExample: --roi 80,150,800,1600",
-        default="53,326,785,1226"
+        default=config.get('roi'),
+        help="Region of Interest 'x,y,w,h'. Overrides config file."
+    )
+    parser.add_argument(
+        "--diff-threshold",
+        type=int,
+        default=config.get('stitcher_diff_threshold'),
+        help="MSE threshold for keyframe detection. Overrides config file."
     )
     parser.add_argument(
         "--debug-next-data",
@@ -186,6 +213,11 @@ def main():
         "--debug-keyframes",
         action="store_true",
         help="Save all extracted keyframes to a 'debug_keyframes/' folder."
+    )
+    parser.add_argument(
+        "--debug-roi",
+        action="store_true",
+        help="Draw the ROI on the first frame and save it as debug_roi.png, then exit."
     )
     args = parser.parse_args()
 
@@ -201,8 +233,21 @@ def main():
         print("Error: ROI must be in the format 'x,y,w,h'")
         return
 
+    if args.debug_roi:
+        cap = cv2.VideoCapture(args.video_path)
+        ret, frame = cap.read()
+        cap.release()
+        if ret:
+            x, y, w, h = roi
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
+            cv2.imwrite("debug_roi.png", frame)
+            print("Saved ROI debug image to debug_roi.png")
+        else:
+            print("Error: Could not read the first frame of the video.")
+        return
+
     # Step 1: Extract keyframes
-    keyframes = extract_keyframes(args.video_path, args.debug_keyframes)
+    keyframes = extract_keyframes(args.video_path, args.diff_threshold, args.debug_keyframes)
     if not keyframes:
         print("Error: Could not extract any frames from the video.")
         return

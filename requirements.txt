@@ -3,3 +3,4 @@ opencv-python
 tqdm
 pytesseract
 pandas
+PyYAML
