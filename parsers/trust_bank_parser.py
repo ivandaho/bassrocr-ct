@@ -11,6 +11,15 @@ class TrustBankParser(TransactionParser):
     """
     requires_dividers = False
 
+    def _date_from_possibly_padded_date_string(self, date_string: str) -> datetime:
+        padded_date: str = date_string[5:]
+        is_single_digit_day =  padded_date.find(" ", 1, 2)
+        if not is_single_digit_day:
+            padded_date = "0" + date_string[5:]
+
+        return datetime.strptime(padded_date, "%d %b %Y")
+
+
     def _clean_ocr_data(self, ocr_data):
         """Cleans the raw OCR data from Tesseract."""
         data = ocr_data[ocr_data.conf > 14].copy()
@@ -61,6 +70,7 @@ class TrustBankParser(TransactionParser):
         """
         print("Step 4: Parsing full-page OCR data with TrustBankParser...")
         
+        cashback_amount = 0.0;
         ocr_data = self.data.get('ocr_data')
         if ocr_data is None:
             print("  Error: TrustBankParser requires full OCR data but none was provided.")
@@ -73,6 +83,7 @@ class TrustBankParser(TransactionParser):
         price_pattern = re.compile(r"(\+?[\d,]+\.\d{2})$")
         
         current_date = None
+        latest_date = None
         self.transactions = []
         
         i = 0
@@ -81,6 +92,8 @@ class TrustBankParser(TransactionParser):
             
             if date_pattern.match(line['text']):
                 current_date = line['text']
+                if latest_date is None:
+                    latest_date = line['text']
                 i += 1
                 continue
 
@@ -123,26 +136,41 @@ class TrustBankParser(TransactionParser):
 
             
             full_description = title
-            if description:
-                full_description += " | " + description
+            # if description:
+            #     full_description += " | " + description
 
             if cleaned_amount:
                 try:
                     amount_float = float(cleaned_amount)
-                    padded_date: str = current_date[5:]
-                    is_single_digit_day =  padded_date.find(" ", 1, 2)
-                    if not is_single_digit_day:
-                        padded_date = "0" + current_date[5:]
-                        
-                    self.transactions.append({
-                        "date": datetime.strptime(padded_date, "%d %b %Y"),
-                        "description": full_description,
-                        "amount": f"{amount_float:.2f}"
-                    })
+                    if title == "Cashback":
+                        cashback_amount +=amount_float
+                    else:
+                        current_date_datetime = self._date_from_possibly_padded_date_string(current_date)
+
+                            
+                        self.transactions.append({
+                            "date": current_date_datetime.strftime("%Y-%m-%d"),
+                            "description": full_description,
+                            "amount": f"{amount_float:.2f}"
+                        })
                 except ValueError:
                     print(f"  Warning: Could not convert amount '{cleaned_amount}' to a number. Skipping transaction: '{title}'")
             
             i += 1
+
+
+        if cashback_amount > 0.00 and latest_date is not None and current_date is not None:
+            latest_date_datetime = self._date_from_possibly_padded_date_string(latest_date)
+            latest_date_str = latest_date_datetime.strftime("%d %b %Y")
+
+            current_date_datetime = self._date_from_possibly_padded_date_string(current_date)
+            current_date_str = current_date_datetime.strftime("%d %b %Y")
+
+            self.transactions.append({
+                "date": latest_date_datetime.strftime("%Y-%m-%d"),
+                "description": f"Cashback - {current_date_str} to {latest_date_str}",
+                "amount": f"{cashback_amount:.2f}"
+            })
 
         print(f"\nSuccessfully parsed {len(self.transactions)} transactions.")
         return self.transactions
