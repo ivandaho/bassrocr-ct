@@ -24,4 +24,4 @@ trust:
   theme: "dark"
   roi: "26,220,360,645" # Example values, adjust as needed
   stitcher_diff_threshold: 3000
-  parser_greyscale_threshold: 60 # Low threshold for dark mode
+  parser_greyscale_threshold: 60 # Low threshold for dark mode. note that this is only used for line detection, which is not in use for trust

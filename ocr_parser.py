@@ -140,9 +140,16 @@ def main():
             segments = segment_image(original_image, dividers, args.statement_type)
             parser_kwargs['segments'] = segments
         else:
-            print("Step 2/3: Skipping divider detection and segmentation.")
-            print("Step 4: Performing full-page OCR...")
-            ocr_data = pytesseract.image_to_data(original_image, output_type=pytesseract.Output.DATAFRAME)
+            # upscale image to help with ocr
+            resized_image = cv2.resize(original_image, None, dst=None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR)
+            print("Step 2/3/4: Skipping divider detection and segmentation, Performing full-page OCR")
+            ocr_data = pytesseract.image_to_data(resized_image, output_type=pytesseract.Output.DATAFRAME)
+            if args.debug_segments:
+                debug_dir = "debug"
+                if not os.path.exists(debug_dir):
+                    os.makedirs(debug_dir)
+                ocr_data.to_csv(os.path.join(debug_dir, 'ocr_data_full.csv'), index=False)
+                print("  DEBUG: Saved full OCR data to debug/ocr_data_full.csv")
             parser_kwargs['ocr_data'] = ocr_data
 
         parser_instance = get_parser(args.statement_type, **parser_kwargs)

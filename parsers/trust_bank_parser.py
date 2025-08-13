@@ -1,6 +1,6 @@
 import re
-import pandas as pd
 from .base_parser import TransactionParser
+LEFT_THRESHOLD = 82
 
 class TrustBankParser(TransactionParser):
     """
@@ -12,7 +12,7 @@ class TrustBankParser(TransactionParser):
 
     def _clean_ocr_data(self, ocr_data):
         """Cleans the raw OCR data from Tesseract."""
-        data = ocr_data[ocr_data.conf > 30].copy()
+        data = ocr_data[ocr_data.conf > 14].copy()
         data = data[data.text.notna()]
         data['text'] = data['text'].str.strip()
         data = data[data.text != '']
@@ -84,6 +84,7 @@ class TrustBankParser(TransactionParser):
                 continue
 
             if not current_date:
+                # keep searching until a date is found
                 i += 1
                 continue
 
@@ -96,7 +97,7 @@ class TrustBankParser(TransactionParser):
                 i += 1
                 continue
 
-            amount_str = price_match.group(1)
+            amount_str = price_match.group(0)
             title = price_pattern.sub("", line['text']).strip()
             
             description = ""
@@ -105,19 +106,20 @@ class TrustBankParser(TransactionParser):
                 next_line = lines[i+1]
                 
                 # is_smaller = next_line['avg_height'] < (line['avg_height'] * 0.95)
-                is_indented = next_line['left'] > line['left']
+                is_indented = next_line['left'] > line['left'] # this will also be False if next line is date, or if next line is widget. might be able to refactor and simplify
+                is_at_least_x = next_line['left'] > LEFT_THRESHOLD # ignore text in icons
                 is_widget = "Pay over 18 months" in next_line['text'] or "Split now" in next_line['text']
                 is_date = date_pattern.match(next_line['text'])
 
-                if is_indented and not is_widget and not is_date:
+                if is_indented and is_at_least_x and not is_widget and not is_date:
                     description = next_line['text']
                     i += 1
-                else:
-                    print(f"is_indented: {is_indented} is_widget: {is_widget} is_date: {is_date}") 
-                    print(next_line['text'])
-                    print(f"{line['text']} {next_line['text']}")
             
-            cleaned_amount = re.sub(r'[^\d\.]', '', amount_str)
+            hasPlus = amount_str.find("+") > -1
+            cleaned_amount = amount_str
+            if not hasPlus:
+                cleaned_amount = "-" + amount_str
+
             
             full_description = title
             if description:
