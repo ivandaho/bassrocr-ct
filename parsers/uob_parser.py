@@ -31,7 +31,7 @@ class UOBParser(TransactionParser):
 
         current_date = None
         date_pattern = re.compile(r"^(\d{1,2}\s\w{3})")
-        amount_pattern = re.compile(r"([\+\-]\s\d+\.\d{2}\sSGD)$")
+        amount_pattern = re.compile(r"([\+\-]\s(\d{,3},?)+\.\d{2}\sSGD)$")
 
         for i, segment in enumerate(segments):
             if self.debug:
@@ -52,13 +52,13 @@ class UOBParser(TransactionParser):
                 print(f"  Found and set date: {current_date}")
 
             if current_date is None:
-                print(f"  Warning: Skipping segment {i+1} because a date has not been found yet. Text: '{text}'")
+                print(f"  Warning: Skipping segment {1} because a date has not been found yet. Text: '{text}'")
                 continue
 
             amount_match = amount_pattern.search(remaining_text)
             if amount_match:
                 raw_amount_str = amount_match.group(1)
-                cleaned_amount_str = raw_amount_str.replace("SGD", "").replace("+", "").replace(" ", "")
+                cleaned_amount_str = raw_amount_str.replace("SGD", "").replace("+", "").replace(" ", "").replace(",", "")
                 
                 try:
                     amount_float = float(cleaned_amount_str)
@@ -68,18 +68,25 @@ class UOBParser(TransactionParser):
                     continue
 
                 description_raw = amount_pattern.sub("", remaining_text).strip()
-                description = " | ".join(line.strip() for line in description_raw.split('\n') if line.strip())
+                description = "";
+                for line in description_raw.split('\n'):
+                    stripped = line.strip()
+                    if stripped.find("Post date ") is -1:
+                        if description == "":
+                            description = stripped
+                        else:
+                            description += f" | {stripped}" 
 
                 self.transactions.append({
                     "date": datetime.strptime(current_date + f" {current_year}", "%d %b %Y"),
                     "description": description,
                     "amount": formatted_amount
                 })
-                print(f"  Parsed transaction: {description} | {formatted_amount}")
+                if self.debug:
+                    print(f"  Parsed transaction from segment {i}: {description} | {formatted_amount}")
             else:
-                if not date_found_in_segment:
-                    clean_text = text.replace('\n', ' ')
-                    print(f"  Skipping segment {i+1} (unrecognized format, no amount found): '{clean_text}'")
+                clean_text = text.replace('\n', ' ')
+                print(f"  Skipping segment {i} (unrecognized format, no amount found): '{clean_text}'")
 
         print(f"\nSuccessfully parsed {len(self.transactions)} transactions.")
         return self.transactions
