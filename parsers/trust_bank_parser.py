@@ -1,3 +1,4 @@
+from datetime import datetime
 import re
 from .base_parser import TransactionParser
 LEFT_THRESHOLD = 82
@@ -128,8 +129,13 @@ class TrustBankParser(TransactionParser):
             if cleaned_amount:
                 try:
                     amount_float = float(cleaned_amount)
+                    padded_date: str = current_date[5:]
+                    is_single_digit_day =  padded_date.find(" ", 1, 2)
+                    if not is_single_digit_day:
+                        padded_date = "0" + current_date[5:]
+                        
                     self.transactions.append({
-                        "Date": current_date,
+                        "date": datetime.strptime(padded_date, "%d %b %Y"),
                         "description": full_description,
                         "amount": f"{amount_float:.2f}"
                     })

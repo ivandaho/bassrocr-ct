@@ -95,7 +95,7 @@ def save_to_csv(transactions, output_path):
         
     print(f"Step 5: Saving data to {output_path}...")
     df = pd.DataFrame(transactions)
-    df = df[["Date", "description", "amount"]]
+    df = df[["date", "description", "amount"]]
     df.to_csv(output_path, index=False, quoting=csv.QUOTE_ALL)
     print("Done.")
 

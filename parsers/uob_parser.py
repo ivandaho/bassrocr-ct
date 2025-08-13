@@ -3,6 +3,9 @@ import re
 import cv2
 import pytesseract
 from .base_parser import TransactionParser
+from datetime import datetime
+
+current_year = datetime.now().strftime("%Y")
 
 class UOBParser(TransactionParser):
     """Parses transactions from UOB (uobone, uobevol) statement screenshots."""
@@ -68,7 +71,7 @@ class UOBParser(TransactionParser):
                 description = " | ".join(line.strip() for line in description_raw.split('\n') if line.strip())
 
                 self.transactions.append({
-                    "Date": current_date,
+                    "date": datetime.strptime(current_date + f" {current_year}", "%d %b %Y"),
                     "description": description,
                     "amount": formatted_amount
                 })
